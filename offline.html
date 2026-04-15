@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Tatifestt · Edición Blindada</title>
+    <style>
+        :root { --celeste: #bde9ff; --dark: #1e293b; --rojo: #ff4757; --glass: rgba(255, 255, 255, 0.95); }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        
+        body { 
+            margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; 
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+            touch-action: none; height: 100vh; color: var(--dark);
+        }
+
+        /* Marcador Superior */
+        #game-ui { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 75px;
+            display: flex; justify-content: space-around; align-items: center;
+            z-index: 100; background: var(--glass); backdrop-filter: blur(15px);
+            border-bottom: 2px solid rgba(0,0,0,0.05); font-weight: 900;
+        }
+        .stat-val { font-size: 1.4rem; color: #0ea5e9; display: block; text-align: center; }
+        .stat-label { font-size: 0.7rem; opacity: 0.6; display: block; }
+        .red-text { color: var(--rojo) !important; }
+
+        /* Área de Toque de los Iconos (Muy grande para no fallar) */
+        .hit-box {
+            position: absolute; 
+            width: 130px; height: 130px; 
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10; cursor: pointer;
+            pointer-events: auto;
+            transform: translate(-50%, -50%); /* Centrado exacto del toque */
+        }
+        .emoji { 
+            font-size: 4rem; pointer-events: none; 
+            filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1));
+            transition: transform 0.2s, opacity 0.1s;
+        }
+
+        /* Pantallas */
+        .overlay {
+            position: fixed; inset: 0; background: rgba(240, 249, 255, 0.98);
+            display: none; flex-direction: column; align-items: center;
+            justify-content: center; z-index: 200; text-align: center; padding: 25px;
+        }
+        .active { display: flex; }
+
+        .card {
+            background: white; padding: 30px; border-radius: 40px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1); border: 2px solid #e2e8f0;
+            width: 100%; max-width: 360px;
+        }
+        
+        .tutorial-box {
+            background: #fff5f5; border: 4px dashed var(--rojo);
+            border-radius: 20px; padding: 20px; margin: 20px 0;
+        }
+        .warning-title { color: var(--rojo); font-size: 1.8rem; font-weight: 900; display: block; }
+        
+        .btn {
+            background: var(--celeste); border: none; padding: 20px;
+            border-radius: 25px; font-weight: 800; font-size: 1.5rem;
+            color: #0369a1; width: 100%; cursor: pointer;
+            box-shadow: 0 10px 25px rgba(14, 165, 233, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-ui">
+        <div><span class="stat-label">PUNTOS</span><span id="score" class="stat-val">0</span></div>
+        <div><span class="stat-label">VIDAS</span><span id="lives" class="stat-val red-text">3</span></div>
+        <div><span class="stat-label">RÉCORD</span><span id="best-ui" class="stat-val">0</span></div>
+    </div>
+
+    <div id="start-screen" class="overlay active">
+        <div class="card">
+            <span style="color:var(--rojo); font-weight:bold;">⚠️ MODO OFFLINE ACTIVADO</span>
+            <h1 style="font-size: 2.5rem; margin: 0; color: #0ea5e9;">Tatifestt</h1>
+            <p style="color:#64748b; margin-top:5px;">No se puede abrir la app por falta de conexión.</p>
+            
+            <div class="tutorial-box">
+                <span class="warning-title">⚡ ESQUIVÁ LOS RAYOS ⚡</span>
+                <p style="font-weight:900; margin: 10px 0; color: var(--dark);">Tocar un RAYO = PERDÉS VIDA</p>
+                <p style="font-weight:900; margin: 10px 0; color: var(--dark);">Se escapa un ICONO = PERDÉS VIDA</p>
+                <div style="font-size:1.5rem; margin-top:10px;">Atrapá: 👻 ✂️ 🎂 🦋 🌈 🖕</div>
+            </div>
+            
+            <button class="btn" onclick="startGame()">JUGAR AHORA</button>
+            <p style="margin-top:15px; font-weight:bold; color:#94a3b8;">Récord: <span id="best-start">0</span></p>
+        </div>
+    </div>
+
+    <div id="end-screen" class="overlay">
+        <h1 style="color:var(--rojo); font-size: 2.5rem;">¡FIN DEL JUEGO!</h1>
+        <div style="font-size: 6rem; font-weight: 900; color: #0ea5e9;" id="final-score">0</div>
+        <p id="record-msg" style="color:#22c55e; font-weight:bold; font-size: 1.2rem; margin-bottom:20px;"></p>
+        <button class="btn" onclick="startGame()">REINTENTAR</button>
+    </div>
+
+    <script>
+        const goods = ['👻', '✂️', '🎂', '🦋', '🌈', '🖕'];
+        const bad = '⚡';
+        let score = 0, lives = 3, isPlaying = false;
+        let highScore = localStorage.getItem('tati_final_record') || 0;
+
+        document.getElementById('best-ui').innerText = highScore;
+        document.getElementById('best-start').innerText = highScore;
+
+        function startGame() {
+            score = 0; lives = 3; isPlaying = true;
+            document.getElementById('score').innerText = score;
+            document.getElementById('lives').innerText = lives;
+            document.getElementById('start-screen').classList.remove('active');
+            document.getElementById('end-screen').classList.remove('active');
+            document.querySelectorAll('.hit-box').forEach(el => el.remove());
+            spawnLoop();
+        }
+
+        function spawnLoop() {
+            if (!isPlaying) return;
+            createIcon();
+            let delay = Math.max(300, 1000 - (score * 15));
+            setTimeout(spawnLoop, delay);
+        }
+
+        function createIcon() {
+            const hb = document.createElement('div');
+            hb.className = 'hit-box';
+            const em = document.createElement('div');
+            em.className = 'emoji';
+            
+            const isBad = Math.random() < 0.25;
+            if (isBad) {
+                em.innerText = bad;
+                hb.dataset.type = 'bad';
+            } else {
+                em.innerText = goods[Math.floor(Math.random() * goods.length)];
+                hb.dataset.type = 'good';
+            }
+            
+            hb.appendChild(em);
+            hb.style.left = (Math.random() * (window.innerWidth - 100) + 50) + 'px';
+            let currentTop = window.innerHeight + 100;
+            hb.style.top = currentTop + 'px';
+
+            let captured = false; // ESTADO ATÓMICO: Evita doble detección
+
+            hb.addEventListener('pointerdown', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                if(!captured && isPlaying) {
+                    captured = true; // SE MARCA COMO CAPTURADO AL INSTANTE
+                    handleInteraction(hb, true);
+                }
+            });
+
+            document.body.appendChild(hb);
+
+            let speed = 3 + (score / 20);
+
+            function move() {
+                if (!isPlaying || captured) { 
+                    hb.remove(); 
+                    return; 
+                }
+                currentTop -= speed;
+                hb.style.top = currentTop + 'px';
+
+                if (currentTop < -100) {
+                    // Si se escapa uno bueno, perdés vida
+                    if (hb.dataset.type === 'good' && !captured) {
+                        loseLife();
+                    }
+                    hb.remove();
+                } else {
+                    requestAnimationFrame(move);
+                }
+            }
+            requestAnimationFrame(move);
+        }
+
+        function handleInteraction(el, isTouch) {
+            const type = el.dataset.type;
+            const em = el.querySelector('.emoji');
+
+            if (type === 'bad') {
+                loseLife(); // Rayo = Daño
+                em.style.transform = 'scale(0.1)';
+            } else {
+                score++; // Bueno = Punto
+                document.getElementById('score').innerText = score;
+                em.style.transform = 'scale(2.5) rotate(20deg)';
+            }
+            
+            em.style.opacity = '0';
+            setTimeout(() => el.remove(), 100);
+        }
+
+        function loseLife() {
+            if (!isPlaying) return;
+            lives--;
+            document.getElementById('lives').innerText = lives;
+            document.body.style.backgroundColor = "#ff7675";
+            setTimeout(() => document.body.style.backgroundColor = "", 150);
+            if (lives <= 0) gameOver();
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            document.getElementById('final-score').innerText = score;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('tati_final_record', highScore);
+                document.getElementById('best-ui').innerText = highScore;
+                document.getElementById('best-start').innerText = highScore;
+                document.getElementById('record-msg').innerText = "¡NUEVO RÉCORD! 🏆";
+            } else {
+                document.getElementById('record-msg').innerText = "Récord actual: " + highScore;
+            }
+            document.getElementById('end-screen').classList.add('active');
+        }
+    </script>
+</body>
+</html>
